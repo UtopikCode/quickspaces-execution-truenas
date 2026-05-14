@@ -45,12 +45,16 @@ type scaleHostConfig struct {
 
 func parseScaleHostConfig(hostConfig json.RawMessage) (scaleHostConfig, error) {
 	if len(hostConfig) == 0 {
-		return scaleHostConfig{}, nil
+		return scaleHostConfig{}, fmt.Errorf("host config must be supplied")
 	}
 
 	var cfg scaleHostConfig
 	if err := json.Unmarshal(hostConfig, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse truenas host config: %w", err)
+	}
+
+	if strings.TrimSpace(cfg.Host) == "" {
+		return cfg, fmt.Errorf("host must be provided")
 	}
 
 	return cfg, nil
@@ -210,9 +214,6 @@ type scaleAuth struct {
 
 func newScaleClient(cfg scaleHostConfig) (ScaleClient, error) {
 	host := strings.TrimSpace(cfg.Host)
-	if host == "" {
-		host = "http://127.0.0.1"
-	}
 	if !strings.Contains(host, "://") {
 		host = "https://" + host
 	}

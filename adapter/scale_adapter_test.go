@@ -110,3 +110,11 @@ func TestNewScaleExecutionAdapterFromHostConfig_InvalidHostConfig(t *testing.T) 
 		t.Fatal("expected error for invalid host config")
 	}
 }
+
+func TestNewScaleExecutionAdapterFromHostConfig_MissingHost(t *testing.T) {
+	hostConfig := json.RawMessage(`{"apiToken":"token123"}`)
+	_, err := NewScaleExecutionAdapterFromHostConfig(hostConfig)
+	if err == nil {
+		t.Fatal("expected error when host is missing")
+	}
+}
