@@ -57,6 +57,10 @@ func parseScaleHostConfig(hostConfig json.RawMessage) (scaleHostConfig, error) {
 		return cfg, fmt.Errorf("host must be provided")
 	}
 
+	if strings.TrimSpace(cfg.ApiToken) == "" && (strings.TrimSpace(cfg.Username) == "" || strings.TrimSpace(cfg.Password) == "") {
+		return cfg, fmt.Errorf("either apiToken or username/password must be provided")
+	}
+
 	return cfg, nil
 }
 
@@ -198,6 +202,7 @@ type ScaleClient interface {
 	StartVM(ctx context.Context, vmID string) error
 	ShutdownVM(ctx context.Context, vmID string) error
 	GetVMStatus(ctx context.Context, vmID string) (string, error)
+	Validate(ctx context.Context) error
 }
 
 type ScaleClientImpl struct {
@@ -222,6 +227,9 @@ func newScaleClient(cfg scaleHostConfig) (ScaleClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse scale host: %w", err)
 	}
+	if baseURL.Host == "" {
+		return nil, fmt.Errorf("parse scale host: missing host")
+	}
 	baseURL.Path = strings.TrimRight(baseURL.Path, "/")
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -232,11 +240,19 @@ func newScaleClient(cfg scaleHostConfig) (ScaleClient, error) {
 		transport.TLSClientConfig.InsecureSkipVerify = true
 	}
 
-	return &ScaleClientImpl{
+	client := &ScaleClientImpl{
 		baseURL: baseURL,
 		client:  &http.Client{Transport: transport, Timeout: 60 * time.Second},
 		auth:    scaleAuth{token: cfg.ApiToken, username: cfg.Username, password: cfg.Password},
-	}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := client.Validate(ctx); err != nil {
+		return nil, fmt.Errorf("validate scale host: %w", err)
+	}
+
+	return client, nil
 }
 
 func (s *ScaleClientImpl) endpoint(relativePath string) string {
@@ -296,6 +312,11 @@ func (s *ScaleClientImpl) doJSON(ctx context.Context, method, endpoint string, r
 		}
 	}
 	return nil
+}
+
+func (s *ScaleClientImpl) Validate(ctx context.Context) error {
+	var result map[string]any
+	return s.doJSON(ctx, http.MethodGet, "/system/info", nil, &result)
 }
 
 func (s *ScaleClientImpl) CreateVM(ctx context.Context, payload scaleVMCreateRequest) (*scaleVMResponse, error) {
