@@ -1,0 +1,21 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Output directories
+bin/
+
+# Build files
+out/
+
+# IDEs and editors
+.vscode/
+
+# Devcontainer
+.devcontainer/.env
+
+# OS files
+.DS_Store
