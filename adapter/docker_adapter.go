@@ -90,7 +90,9 @@ func (d *DockerExecutionAdapter) pullImage(ctx context.Context, imageRef string)
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", imageRef, err)
 	}
-	defer reader.Close()
+	defer func() {
+		_ = reader.Close()
+	}()
 	_, _ = io.Copy(io.Discard, reader)
 	return nil
 }

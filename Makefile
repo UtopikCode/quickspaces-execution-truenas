@@ -1,6 +1,7 @@
 SHELL := /usr/bin/env bash
 GOBIN := $(shell go env GOPATH)/bin
 GOLANGCI_LINT := $(GOBIN)/golangci-lint
+GOLANGCI_LINT_VERSION := v2.12.2
 
 .PHONY: all help tidy fmt check-format vet test lint lint-fix ci
 
@@ -39,7 +40,7 @@ test:
 	go test ./...
 
 install-tools:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/$(GOLANGCI_LINT_VERSION)/install.sh | sh -s -- -b $(GOBIN) $(GOLANGCI_LINT_VERSION)
 
 lint: install-tools
 	$(GOLANGCI_LINT) run ./...
