@@ -2,17 +2,15 @@ package adapter
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"testing"
 
 	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
-	"github.com/docker/docker/api/types"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/errdefs"
 )
 
 type mockDockerClient struct {
@@ -20,7 +18,7 @@ type mockDockerClient struct {
 	createErr      error
 	startErr       error
 	stopErr        error
-	inspectResult  types.ContainerJSON
+	inspectResult  container.InspectResponse
 	inspectErr     error
 	pulledImages   []string
 }
@@ -37,7 +35,7 @@ func (m *mockDockerClient) ContainerStop(ctx context.Context, containerID string
 	return m.stopErr
 }
 
-func (m *mockDockerClient) ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+func (m *mockDockerClient) ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	return m.inspectResult, m.inspectErr
 }
 
@@ -75,7 +73,7 @@ func TestDockerExecutionAdapter_StartWorkspace(t *testing.T) {
 }
 
 func TestDockerExecutionAdapter_StopWorkspace_NotFound(t *testing.T) {
-	mock := &mockDockerClient{stopErr: errdefs.NotFound(fmt.Errorf("no such container"))}
+	mock := &mockDockerClient{stopErr: cerrdefs.ErrNotFound.WithMessage("no such container")}
 	adapter := NewDockerExecutionAdapter(mock)
 
 	err := adapter.StopWorkspace(context.Background(), "workspace-unknown")
@@ -89,11 +87,11 @@ func TestDockerExecutionAdapter_StopWorkspace_NotFound(t *testing.T) {
 
 func TestDockerExecutionAdapter_GetWorkspaceStatus(t *testing.T) {
 	mock := &mockDockerClient{
-		inspectResult: types.ContainerJSON{
+		inspectResult: container.InspectResponse{
 			ContainerJSONBase: &container.ContainerJSONBase{
 				ID:    "container-1",
 				Image: "alpine:latest",
-				State: &types.ContainerState{Status: "running", Running: true, ExitCode: 0, StartedAt: "now"},
+				State: &container.State{Status: "running", Running: true, ExitCode: 0, StartedAt: "now"},
 			},
 			Config: &container.Config{Image: "alpine:latest"},
 		},

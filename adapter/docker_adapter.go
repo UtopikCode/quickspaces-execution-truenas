@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -54,7 +54,7 @@ func (d *DockerExecutionAdapter) StartWorkspace(ctx context.Context, ws contract
 func (d *DockerExecutionAdapter) StopWorkspace(ctx context.Context, id string) error {
 	timeout := 10
 	if err := d.client.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout}); err != nil {
-		if errdefs.IsNotFound(err) {
+		if cerrdefs.IsNotFound(err) {
 			return ErrWorkspaceNotFound
 		}
 		return fmt.Errorf("stop container: %w", err)
@@ -65,7 +65,7 @@ func (d *DockerExecutionAdapter) StopWorkspace(ctx context.Context, id string) e
 func (d *DockerExecutionAdapter) GetWorkspaceStatus(ctx context.Context, id string) (contracts.WorkspaceState, error) {
 	inspect, err := d.client.ContainerInspect(ctx, id)
 	if err != nil {
-		if errdefs.IsNotFound(err) {
+		if cerrdefs.IsNotFound(err) {
 			return contracts.WorkspaceStateError, ErrWorkspaceNotFound
 		}
 		return contracts.WorkspaceStateError, fmt.Errorf("inspect container: %w", err)

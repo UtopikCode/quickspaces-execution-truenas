@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
@@ -15,7 +14,7 @@ type DockerClient interface {
 	ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (container.CreateResponse, error)
 	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
 	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
-	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
+	ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error)
 	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
 }
 
@@ -43,7 +42,7 @@ func (d *DockerClientImpl) ContainerStop(ctx context.Context, containerID string
 	return d.client.ContainerStop(ctx, containerID, options)
 }
 
-func (d *DockerClientImpl) ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+func (d *DockerClientImpl) ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	return d.client.ContainerInspect(ctx, containerID)
 }
 

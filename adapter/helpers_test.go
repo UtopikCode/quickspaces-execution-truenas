@@ -6,13 +6,9 @@ import (
 	"testing"
 
 	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
-	"github.com/docker/docker/errdefs"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/go-connections/nat"
 )
-
-type helperMockDockerClient struct {
-	mockDockerClient
-}
 
 func TestIsWorkspaceNotFound(t *testing.T) {
 	if IsWorkspaceNotFound(nil) {
@@ -85,7 +81,7 @@ func TestDockerExecutionAdapter_StopWorkspace_Error(t *testing.T) {
 }
 
 func TestDockerExecutionAdapter_GetWorkspaceStatus_NotFound(t *testing.T) {
-	mock := &mockDockerClient{inspectErr: errdefs.NotFound(errors.New("not found"))}
+	mock := &mockDockerClient{inspectErr: cerrdefs.ErrNotFound.WithMessage("not found")}
 	adapter := NewDockerExecutionAdapter(mock)
 
 	status, err := adapter.GetWorkspaceStatus(context.Background(), "workspace-unknown")
