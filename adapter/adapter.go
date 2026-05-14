@@ -17,6 +17,18 @@ func NewDockerExecutionAdapter(client DockerClient) ExecutionAdapter {
 	return &DockerExecutionAdapter{client: client}
 }
 
+func NewDefaultDockerExecutionAdapter() (contracts.ExecutionAdapter, error) {
+	client, err := NewDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	return NewDockerExecutionAdapter(client), nil
+}
+
+func NewDefaultAdapter() (contracts.ExecutionAdapter, error) {
+	return NewDefaultDockerExecutionAdapter()
+}
+
 type dockerRuntimeConfig struct {
 	Image string            `json:"image"`
 	Env   map[string]string `json:"env"`
