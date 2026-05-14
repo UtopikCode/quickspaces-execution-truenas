@@ -5,58 +5,55 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
-	"github.com/docker/docker/api/types"
+	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/errdefs"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
 )
 
-type DockerExecutionAdapter struct {
-	client DockerClient
-}
+func (d *DockerExecutionAdapter) StartWorkspace(ctx context.Context, ws contracts.Workspace) (contracts.WorkspaceState, error) {
+	cfg, err := parseDockerRuntimeConfig(ws.ExecutionProfile)
+	if err != nil {
+		return contracts.WorkspaceStateError, err
+	}
 
-func NewDockerExecutionAdapter(client DockerClient) *DockerExecutionAdapter {
-	return &DockerExecutionAdapter{client: client}
-}
-
-func (d *DockerExecutionAdapter) StartWorkspace(ctx context.Context, workspaceID string, image string, options WorkspaceOptions) (string, error) {
-	if err := d.pullImage(ctx, image); err != nil {
-		return "", err
+	if err := d.pullImage(ctx, cfg.Image); err != nil {
+		return contracts.WorkspaceStateError, err
 	}
 
 	config := &container.Config{
-		Image: image,
-		Env:   envList(options.Env),
-		Cmd:   options.Cmd,
+		Image: cfg.Image,
+		Env:   envList(cfg.Env),
+		Cmd:   cfg.Cmd,
 	}
 
 	hostConfig := &container.HostConfig{}
-	if len(options.Ports) > 0 {
-		bindings, err := buildPortBindings(options.Ports)
+	if len(cfg.Ports) > 0 {
+		bindings, err := buildPortBindings(cfg.Ports)
 		if err != nil {
-			return "", err
+			return contracts.WorkspaceStateError, err
 		}
 		hostConfig.PortBindings = bindings
 	}
 
-	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, &network.NetworkingConfig{}, workspaceID)
+	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, &network.NetworkingConfig{}, containerNameFromWorkspace(ws))
 	if err != nil {
-		return "", fmt.Errorf("create container: %w", err)
+		return contracts.WorkspaceStateError, fmt.Errorf("create container: %w", err)
 	}
 
-	if err := d.client.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return "", fmt.Errorf("start container: %w", err)
+	if err := d.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return contracts.WorkspaceStateError, fmt.Errorf("start container: %w", err)
 	}
 
-	return resp.ID, nil
+	return contracts.WorkspaceStateRunning, nil
 }
 
-func (d *DockerExecutionAdapter) StopWorkspace(ctx context.Context, workspaceID string) error {
-	timeout := 10 * time.Second
-	if err := d.client.ContainerStop(ctx, workspaceID, &timeout); err != nil {
+func (d *DockerExecutionAdapter) StopWorkspace(ctx context.Context, id string) error {
+	timeout := 10
+	if err := d.client.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout}); err != nil {
 		if errdefs.IsNotFound(err) {
 			return ErrWorkspaceNotFound
 		}
@@ -65,33 +62,33 @@ func (d *DockerExecutionAdapter) StopWorkspace(ctx context.Context, workspaceID 
 	return nil
 }
 
-func (d *DockerExecutionAdapter) GetWorkspaceStatus(ctx context.Context, workspaceID string) (WorkspaceStatus, error) {
-	inspect, err := d.client.ContainerInspect(ctx, workspaceID)
+func (d *DockerExecutionAdapter) GetWorkspaceStatus(ctx context.Context, id string) (contracts.WorkspaceState, error) {
+	inspect, err := d.client.ContainerInspect(ctx, id)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			return WorkspaceStatus{State: "NotFound"}, ErrWorkspaceNotFound
+			return contracts.WorkspaceStateError, ErrWorkspaceNotFound
 		}
-		return WorkspaceStatus{}, fmt.Errorf("inspect container: %w", err)
+		return contracts.WorkspaceStateError, fmt.Errorf("inspect container: %w", err)
 	}
 
-	status := WorkspaceStatus{
-		ContainerID: inspect.ID,
-		Image:       inspect.Config.Image,
-		State:       inspect.State.Status,
-		Status:      inspect.State.Status,
-		Running:     inspect.State.Running,
-		ExitCode:    inspect.State.ExitCode,
-		StartedAt:   inspect.State.StartedAt,
-		FinishedAt:  inspect.State.FinishedAt,
+	if inspect.State == nil {
+		return contracts.WorkspaceStateError, fmt.Errorf("inspect container: missing state")
 	}
 
-	return status, nil
+	switch strings.ToLower(inspect.State.Status) {
+	case "running":
+		return contracts.WorkspaceStateRunning, nil
+	case "created", "restarting":
+		return contracts.WorkspaceStatePending, nil
+	default:
+		return contracts.WorkspaceStateStopped, nil
+	}
 }
 
-func (d *DockerExecutionAdapter) pullImage(ctx context.Context, image string) error {
-	reader, err := d.client.ImagePull(ctx, image, types.ImagePullOptions{})
+func (d *DockerExecutionAdapter) pullImage(ctx context.Context, imageRef string) error {
+	reader, err := d.client.ImagePull(ctx, imageRef, image.PullOptions{})
 	if err != nil {
-		return fmt.Errorf("pull image %s: %w", image, err)
+		return fmt.Errorf("pull image %s: %w", imageRef, err)
 	}
 	defer reader.Close()
 	_, _ = io.Copy(io.Discard, reader)

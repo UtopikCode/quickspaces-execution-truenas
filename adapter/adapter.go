@@ -1,17 +1,27 @@
 package adapter
 
-import "context"
+import (
+	"encoding/json"
+	"fmt"
 
-type ExecutionAdapter interface {
-	StartWorkspace(ctx context.Context, workspaceID string, image string, options WorkspaceOptions) (string, error)
-	StopWorkspace(ctx context.Context, workspaceID string) error
-	GetWorkspaceStatus(ctx context.Context, workspaceID string) (WorkspaceStatus, error)
+	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
+)
+
+type ExecutionAdapter = contracts.ExecutionAdapter
+
+type DockerExecutionAdapter struct {
+	client DockerClient
 }
 
-type WorkspaceOptions struct {
-	Env   map[string]string
-	Ports map[string]string
-	Cmd   []string
+func NewDockerExecutionAdapter(client DockerClient) ExecutionAdapter {
+	return &DockerExecutionAdapter{client: client}
+}
+
+type dockerRuntimeConfig struct {
+	Image string            `json:"image"`
+	Env   map[string]string `json:"env"`
+	Cmd   []string          `json:"cmd"`
+	Ports map[string]string `json:"ports"`
 }
 
 var (
@@ -35,4 +45,30 @@ func IsWorkspaceNotFound(err error) bool {
 		return wErr.Code == ErrWorkspaceNotFound.Code
 	}
 	return false
+}
+
+func parseDockerRuntimeConfig(profile contracts.ExecutionProfile) (dockerRuntimeConfig, error) {
+	if len(profile.RuntimeConfig) == 0 {
+		return dockerRuntimeConfig{}, fmt.Errorf("executionProfile.runtimeConfig must be supplied")
+	}
+
+	payload, err := json.Marshal(profile.RuntimeConfig)
+	if err != nil {
+		return dockerRuntimeConfig{}, fmt.Errorf("encode runtimeConfig: %w", err)
+	}
+
+	var cfg dockerRuntimeConfig
+	if err := json.Unmarshal(payload, &cfg); err != nil {
+		return dockerRuntimeConfig{}, fmt.Errorf("parse docker runtimeConfig: %w", err)
+	}
+
+	if cfg.Image == "" {
+		return dockerRuntimeConfig{}, fmt.Errorf("docker runtimeConfig missing image")
+	}
+
+	return cfg, nil
+}
+
+func containerNameFromWorkspace(ws contracts.Workspace) string {
+	return ws.ID
 }
