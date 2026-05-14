@@ -3,6 +3,9 @@ package adapter
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	contracts "github.com/UtopikCode/quickspaces-execution-contracts"
@@ -16,6 +19,7 @@ type mockScaleClient struct {
 	shutdownErr     error
 	statusResponse  string
 	statusErr       error
+	validateErr     error
 }
 
 func (m *mockScaleClient) CreateVM(ctx context.Context, payload scaleVMCreateRequest) (*scaleVMResponse, error) {
@@ -33,6 +37,10 @@ func (m *mockScaleClient) ShutdownVM(ctx context.Context, vmID string) error {
 
 func (m *mockScaleClient) GetVMStatus(ctx context.Context, vmID string) (string, error) {
 	return m.statusResponse, m.statusErr
+}
+
+func (m *mockScaleClient) Validate(ctx context.Context) error {
+	return m.validateErr
 }
 
 func TestScaleExecutionAdapter_StartWorkspace(t *testing.T) {
@@ -93,7 +101,16 @@ func TestScaleExecutionAdapter_GetWorkspaceStatus(t *testing.T) {
 }
 
 func TestNewScaleExecutionAdapterFromHostConfig_ParsesHostConfig(t *testing.T) {
-	hostConfig := json.RawMessage(`{"host":"https://truenas.local","apiToken":"token123","insecure":true}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2.0/system/info" {
+			t.Fatalf("expected system info endpoint, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"hostname":"truenas"}`))
+	}))
+	defer srv.Close()
+
+	hostConfig := json.RawMessage(fmt.Sprintf(`{"host":"%s","apiToken":"token123","insecure":true}`, srv.URL))
 	adapter, err := NewScaleExecutionAdapterFromHostConfig(hostConfig)
 	if err != nil {
 		t.Fatalf("expected no error creating scale adapter from host config, got %v", err)
@@ -108,6 +125,34 @@ func TestNewScaleExecutionAdapterFromHostConfig_InvalidHostConfig(t *testing.T) 
 	_, err := NewScaleExecutionAdapterFromHostConfig(hostConfig)
 	if err == nil {
 		t.Fatal("expected error for invalid host config")
+	}
+}
+
+func TestNewScaleExecutionAdapterFromHostConfig_HostOffline(t *testing.T) {
+	hostConfig := json.RawMessage(`{"host":"http://127.0.0.1:1","apiToken":"token123"}`)
+	_, err := NewScaleExecutionAdapterFromHostConfig(hostConfig)
+	if err == nil {
+		t.Fatal("expected error when host is unreachable")
+	}
+}
+
+func TestNewScaleExecutionAdapterFromHostConfig_ValidatesHostOnline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2.0/system/info" {
+			t.Fatalf("expected system info endpoint, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"hostname":"truenas"}`))
+	}))
+	defer srv.Close()
+
+	hostConfig := json.RawMessage(fmt.Sprintf(`{"host":"%s","apiToken":"token123"}`, srv.URL))
+	adapter, err := NewScaleExecutionAdapterFromHostConfig(hostConfig)
+	if err != nil {
+		t.Fatalf("expected no error creating scale adapter from host config, got %v", err)
+	}
+	if adapter == nil {
+		t.Fatal("expected adapter, got nil")
 	}
 }
 
