@@ -3,7 +3,7 @@ module github.com/UtopikCode/quickspaces-execution-truenas
 go 1.25.0
 
 require (
-	github.com/UtopikCode/quickspaces-execution-contracts v0.0.0-20260512162415-d0eadd87f4ba
+	github.com/UtopikCode/quickspaces-execution-contracts v1.0.1
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.7.0
 )
